@@ -18,6 +18,11 @@ var connection = mysql.createConnection({//local DB에 연결.
 });
 connection.connect();
 
+request.defaults({ //rejectUnauthorized를 false값으로 두어야 https 서버통신 가능
+    strictSSL: false, // allow us to use our self-signed cert for testing
+    rejectUnauthorized: false
+});
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; //crt의 self-signed 문제 해결
 
 var key = fs.readFileSync('./keys/bpr.pem', 'utf-8');
@@ -29,6 +34,7 @@ var time = newData.toFormat('YYYY-MM-DD HH24:MI:SS');
 
 var app = express();
 
+app.use(express.urlencoded({ extended: false }));//form에서 데이터를 받아오자!
 app.use(express.json());
 
 //1. 서버 상태 확인 프로세스
@@ -83,13 +89,11 @@ app.post("/login", (req,res)=>{
                     connection.query(sql2, [sessionKey, dbID], function(err, results){
                         if(err) throw err;
                         else{
-                            console.log("sessionKey created and insert");
                             var output={
                                 "mode" : "login" , 
                                 "result" : "true" , 
                                 "session_key" : randomNum
                             }
-                            console.log(output);
                             res.send(output);
                         }
                     });
@@ -132,7 +136,7 @@ app.post("/logout",function(req,res){
                         sql2,[" ",dbCI],function(error, results){
                             if(error)   throw error;
                             else{
-                                console.log("sessionKey destoryed");
+                                //console.log("sessionKey destoryed");
                             }
                         });
                     
@@ -159,7 +163,7 @@ app.post("/registration/fingerprint", (req, res)=>{
     var sessionKey = req.body.session_key;
     console.log("Server Time ["+ time +"] REQUEST CI : "+"Session Key ["+req.body.session_key+"]");
 
-    var sql="SELECT * FROM bank WHERE sessionKey = ?";
+    var sql="SELECT * FROM b_bank WHERE sessionKey = ?";
     connection.query(
         sql,[sessionKey], function(error, results){
             if(error)   throw error;
@@ -184,20 +188,6 @@ app.post("/user/valid", function(req,res){
     var name = req.body.name;
     var bank_number = req.body.bank_number;
     var account_number = req.body.account_number;
-
-    // console.log("USER VAILD - SUCCESS");
-    // var output={
-    //     "mode" : "depositor_valid" , 
-    //     "result" : true
-    // };
-
-    // res.send(output);
-
-    // console.log("USER VAILD - SUCCESS");
-    // console.log("USER VAILD - FAIL");
-    //-------------------------- 08-24 테스트 코드 ------------------------
-
-    console.log("Server Time ["+ time +"] USER VAILD : "+"Name ["+req.body.name+"]  Bank number ["+req.body.bank_number+"]  account number ["+req.body.account_number+"]");
 
     var output;
     var bank_id = "T991641910U";
@@ -228,10 +218,10 @@ app.post("/user/valid", function(req,res){
     }
 
     request(option, function(err, response, body) {
-        var res = body.rsp_code;
-        if(res == "A0000") {
+        var data = body.rsp_code;
+        if(data == "A0000") {
             // 정상인 경우
-            if(bodybody.account_holder_name == req.body.name) {
+            if(body.account_holder_name == req.body.name) {
                 output = {'mode':"depositor_valid", 'result':"true"};
                 console.log("Server Time ["+ time +"] USER VAILD - SUCCESS");
             }
@@ -242,10 +232,8 @@ app.post("/user/valid", function(req,res){
             output = {'mode':"depositor_valid", 'result':"false"}; 
             console.log("Server Time ["+ time +"] USER VAILD - FAIL");
         }
-
-    });
-
-    res.send(output);  
+        res.json(output);
+    });    
 });
 
 app.post("/user/balance", function(req,res){
@@ -272,19 +260,19 @@ app.post("/user/balance", function(req,res){
     }
 
     request(option, function(err, response, body) {
-        var res = JSON.parse(body);
-        if(res.rsp_code == "A0000") {
+        var test = JSON.parse(body);
+        if(test.rsp_code == "A0000") {
             // 정상인 경우
-            output = {'mode':"balance", 'result':"true", 'value': res.balance_amt}; 
+            output = {'mode':"balance", 'result':"true", 'value': test.balance_amt}; 
         }
         else {
             output = {'mode':"balance", 'result':"false", 'value':"null"}; 
         }
-        res.send(output);         
+        res.json(output);         
     });
-
 });
 
 var httpsServer = https.createServer(credentials, app);
 httpsServer.listen(443);
-console.log('Server running');
+
+console.log('B Bank Server running');
